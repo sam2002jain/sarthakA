@@ -1,94 +1,117 @@
+"use client";
+import React, { useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
 
 export default function Home() {
+  // Sample list of users
+  const [users, setUsers] = useState([
+    {
+      id: 1,
+      name: "John Doe",
+      rights: { view: false, edit: false, delete: false },
+    },
+    {
+      id: 2,
+      name: "Jane Smith",
+      rights: { view: true, edit: false, delete: false },
+    },
+    {
+      id: 3,
+      name: "Michael Johnson",
+      rights: { view: true, edit: true, delete: false },
+    },
+  ]);
+
+  // Toggle checkbox for rights
+  const handleCheckboxChange = (userId:any, right:any) => {
+    setUsers((prevUsers) =>
+      prevUsers.map((user) =>
+        user.id === userId
+          ? {
+              ...user,
+              rights: {
+                ...user.rights,
+                [right]: !user.rights[right],
+              },
+            }
+          : user
+      )
+    );
+  };
+
+  // Save action
+  const handleSave = () => {
+    alert("User rights updated successfully!");
+    console.log("Updated Users:", users);
+    // Here you can call your API to save user rights to the backend
+  };
+
   return (
     <div className={styles.page}>
-      <main className={styles.main}>
+      {/* HEADER */}
+      <header className={styles.header}>
         <Image
           className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+          src="/onlinejainmanchlogo.jpeg"
+          alt="Online Jain Manch Logo"
+          width={80}
+          height={80}
         />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+        <h2>Online Jain Manch - Admin Panel</h2>
+      </header>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
+      {/* CONTAINER */}
+      <div className={styles.container}>
+        <h3 className={styles.title}>Assign User Rights</h3>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>View</th>
+              <th>Edit</th>
+              <th>Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td>{user.name}</td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={user.rights.view}
+                    onChange={() => handleCheckboxChange(user.id, "view")}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={user.rights.edit}
+                    onChange={() => handleCheckboxChange(user.id, "edit")}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={user.rights.delete}
+                    onChange={() => handleCheckboxChange(user.id, "delete")}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button className={styles.saveButton} onClick={handleSave}>
+          Save Changes
+        </button>
+      </div>
+
+      {/* FOOTER */}
       <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+        <div>
+          <p>Powered by: Sarthak Digital</p>
+        </div>
       </footer>
     </div>
   );
