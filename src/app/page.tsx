@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
-import { collection, doc, getDocs, updateDoc, getDoc, query, where, setDoc } from "firebase/firestore";
+import { collection, doc, getDocs, updateDoc, getDoc, query, where, setDoc, Timestamp } from "firebase/firestore";
 import { db, auth } from "../../firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 
@@ -16,6 +16,8 @@ type User = {
   postedit?: boolean;
   postvisible?: boolean;
   isAdmin?: boolean;
+  kbsquiz?: boolean;
+  bhajanquiz?: boolean;
 };
 
 // Data contract:
@@ -30,6 +32,7 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [currentUid, setCurrentUid] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<any | null | undefined>(undefined);
 
   // Auth gating + Fetch users from `login` collection (top-level flags)
   useEffect(() => {
@@ -96,6 +99,8 @@ export default function Home() {
           postdelete: !!u.postdelete,
           postedit: !!u.postedit,
           postvisible: !!u.postvisible,
+          kbsquiz: !!u.kbsquiz,
+          bhajanquiz: !!u.bhajanquiz,
         }));
         if (mounted) setUsers(normalized);
       } catch (err) {
@@ -107,18 +112,31 @@ export default function Home() {
     };
 
     // listen for auth state
+    let authResolved = false;
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      authResolved = true;
+      setAuthUser(user);
       if (user) {
         loadIfAdmin(user.uid);
       } else {
-        setError("Not authenticated");
+        // no user signed in -> show login form
+        setError(null);
         setLoading(false);
       }
     });
 
+    // fallback: if auth state didn't resolve in 1.5s, show login form
+    const fallback = setTimeout(() => {
+      if (mounted && !authResolved) {
+        setLoading(false);
+        setAuthUser(null);
+      }
+    }, 1500);
+
     return () => {
       mounted = false;
       unsubscribe();
+      clearTimeout(fallback);
     };
   }, []);
 
@@ -134,6 +152,11 @@ export default function Home() {
   const setRowSavingState = (id: string, v: boolean) => setRowSaving((p) => ({ ...p, [id]: v }));
   const setRowErrorState = (id: string, msg: string | null) => setRowErrorMap((p) => ({ ...p, [id]: msg }));
 
+  // global config state (single field for all users)
+  const [timeleftforkbs, setTimeleftforkbs] = useState<string>("");
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+
   const saveUser = async (u: User) => {
     setRowSavingState(u.id, true);
     setRowErrorState(u.id, null);
@@ -144,6 +167,8 @@ export default function Home() {
         postedit: !!u.postedit,
         postdelete: !!u.postdelete,
         postvisible: !!u.postvisible,
+        kbsquiz: !!u.kbsquiz,
+        bhajanquiz: !!u.bhajanquiz,
       });
       setRowErrorState(u.id, null);
     } catch (err) {
@@ -151,6 +176,76 @@ export default function Home() {
       setRowErrorState(u.id, (err as Error).message || "Failed to save");
     } finally {
       setRowSavingState(u.id, false);
+    }
+  };
+
+  // Load global config (timeleftforkbs)
+  const loadConfig = async () => {
+    try {
+      const cfgDoc = doc(db, "config", "global");
+      const snap = await getDoc(cfgDoc);
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        const v = data.timeleftforkbs;
+        if (v == null) {
+          setTimeleftforkbs("");
+        } else if (v instanceof Timestamp) {
+          // convert to local datetime-local string
+          const d = v.toDate();
+          const pad = (n: number) => n.toString().padStart(2, "0");
+          const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+            d.getMinutes()
+          )}`;
+          setTimeleftforkbs(local);
+        } else if (typeof v === "string") {
+          // try to parse string and convert to local datetime-local
+          const d = new Date(v);
+          if (!isNaN(d.getTime())) {
+            const pad = (n: number) => n.toString().padStart(2, "0");
+            const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+              d.getMinutes()
+            )}`;
+            setTimeleftforkbs(local);
+          } else {
+            setTimeleftforkbs(v);
+          }
+        } else {
+          // unknown type -> stringify
+          setTimeleftforkbs(String(v));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load config:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const saveConfig = async () => {
+    setConfigSaving(true);
+    setConfigError(null);
+    try {
+      const cfgDoc = doc(db, "config", "global");
+      if (!timeleftforkbs) {
+        await setDoc(cfgDoc, { timeleftforkbs: null }, { merge: true });
+      } else {
+        // convert local datetime-local string to Date (interpreted as local) and then to Timestamp
+        const d = new Date(timeleftforkbs);
+        if (isNaN(d.getTime())) {
+          // fallback: save raw string
+          await setDoc(cfgDoc, { timeleftforkbs }, { merge: true });
+        } else {
+          const ts = Timestamp.fromDate(d);
+          await setDoc(cfgDoc, { timeleftforkbs: ts }, { merge: true });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save config:", err);
+      setConfigError((err as Error).message || "Failed to save config");
+    } finally {
+      setConfigSaving(false);
     }
   };
 
@@ -192,10 +287,10 @@ export default function Home() {
 
         {loading ? (
           <p>Loading...</p>
-        ) : error ? (
+        ) : authUser === null ? (
+          // no signed-in user -> show login form
           <div>
-            <p style={{ color: "red" }}>Error: {error}</p>
-            {/* If not authenticated or access denied, show sign-in form */}
+            {error ? <p style={{ color: "red" }}>Error: {error}</p> : null}
             <form onSubmit={handleSignIn} style={{ marginTop: 12 }}>
               <div>
                 <label>
@@ -212,12 +307,27 @@ export default function Home() {
               </div>
             </form>
           </div>
+        ) : error ? (
+          <div>
+            <p style={{ color: "red" }}>Error: {error}</p>
+          </div>
         ) : (
           <>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
               <div>Signed in as: {currentUid}</div>
               <button onClick={handleSignOut}>Sign out</button>
             </div>
+            {/* Global config (single field for all users) */}
+            <div style={{ marginBottom: 12, border: "1px solid #6e6969ff", padding: 12, backgroundColor: "#f5f5f5" }}>
+              <label style={{color:"#202124",}}>
+                time left for kbs: <input value={timeleftforkbs} onChange={(e) => setTimeleftforkbs(e.target.value)} placeholder="string or timestamp" />
+              </label>
+              <button onClick={saveConfig} disabled={configSaving} style={{ marginLeft: 8, color: "white", backgroundColor: "#0070f3", border: "none", padding: "6px 12px", cursor: "pointer" }}>
+                {configSaving ? "Saving..." : "Save config"}
+              </button>
+              {configError ? <div style={{ color: "red" }}>{configError}</div> : null}
+            </div>
+
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -226,6 +336,8 @@ export default function Home() {
                   <th>Post Edit</th>
                   <th>Post Delete</th>
                   <th>Post Visible</th>
+                  <th>kbsquiz</th>
+                  <th>bhajanquiz</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -244,6 +356,12 @@ export default function Home() {
                     </td>
                     <td>
                       <input type="checkbox" checked={!!user.postvisible} onChange={() => handleCheckboxChange(user.id, "postvisible")} />
+                    </td>
+                    <td>
+                      <input type="checkbox" checked={!!user.kbsquiz} onChange={() => handleCheckboxChange(user.id, "kbsquiz" as any)} />
+                    </td>
+                    <td>
+                      <input type="checkbox" checked={!!user.bhajanquiz} onChange={() => handleCheckboxChange(user.id, "bhajanquiz" as any)} />
                     </td>
                     <td>
                       <button
