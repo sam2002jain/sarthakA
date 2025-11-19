@@ -2,7 +2,20 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
-import { collection, doc, getDocs, updateDoc, getDoc, query, where, setDoc, Timestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import { db, auth } from "../../firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 
@@ -20,6 +33,16 @@ type User = {
   bhajanquiz?: boolean;
 };
 
+type ChatMessage = {
+  id: string;
+  text?: string;
+  sender?: string;
+  senderRole?: string;
+  createdAt?: any;
+};
+
+const SESSION_DOC_ID = "live_session_global";
+
 // Data contract:
 // Each document in `login` collection is expected to have:
 // { name: string, rights: { postapproval?: boolean, postdelete?: boolean, postedit?: boolean, postvisible?: boolean, ... } }
@@ -33,6 +56,10 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [currentUid, setCurrentUid] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<any | null | undefined>(undefined);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // Auth gating + Fetch users from `login` collection (top-level flags)
   useEffect(() => {
@@ -139,6 +166,76 @@ export default function Home() {
       clearTimeout(fallback);
     };
   }, []);
+
+  const getTimestampValue = (value: any) => {
+    if (!value) return Date.now();
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? Date.now() : parsed;
+    }
+    if (value?.seconds) {
+      const nanos = value.nanoseconds ? value.nanoseconds / 1_000_000 : 0;
+      return value.seconds * 1000 + nanos;
+    }
+    return Date.now();
+  };
+
+  const getReadableChatTime = (value: any) => {
+    const date = new Date(getTimestampValue(value));
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  useEffect(() => {
+    if (!authUser) {
+      setChatMessages([]);
+      return;
+    }
+
+    const messagesRef = collection(db, "live_chats", SESSION_DOC_ID, "messages");
+    const messagesQuery = query(messagesRef, orderBy("createdAt", "asc"));
+
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        const nextMessages = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as any),
+        }));
+        setChatMessages(nextMessages);
+        setChatError(null);
+      },
+      (error) => {
+        console.error("Failed to subscribe to chat messages:", error);
+        setChatError("Unable to load chat messages right now.");
+      }
+    );
+
+    return () => unsubscribe();
+  }, [authUser]);
+
+  const sendChatMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!chatInput.trim() || chatSending || !authUser) return;
+
+    setChatSending(true);
+    try {
+      const senderName = auth.currentUser?.displayName || auth.currentUser?.email || "Admin";
+      await addDoc(collection(db, "live_chats", SESSION_DOC_ID, "messages"), {
+        text: chatInput.trim(),
+        sender: senderName,
+        senderRole: "admin",
+        createdAt: Date.now(),
+      });
+      setChatInput("");
+      setChatError(null);
+    } catch (error) {
+      console.error("Failed to send chat message:", error);
+      setChatError("Failed to send message. Please try again.");
+    } finally {
+      setChatSending(false);
+    }
+  };
 
   const handleCheckboxChange = (userId: string, field: keyof User) => {
     setUsers((prev) =>
@@ -326,6 +423,97 @@ export default function Home() {
                 {configSaving ? "Saving..." : "Save config"}
               </button>
               {configError ? <div style={{ color: "red" }}>{configError}</div> : null}
+            </div>
+
+            <div
+              style={{
+                marginBottom: 24,
+                border: "1px solid #d9d9d9",
+                borderRadius: 12,
+                padding: 16,
+                backgroundColor: "#fafafa",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h4 style={{ margin: 0 }}>Live Session Chat</h4>
+                <span style={{ fontSize: 12, color: "#666" }}>Session: {SESSION_DOC_ID}</span>
+              </div>
+              <div
+                style={{
+                  maxHeight: 240,
+                  overflowY: "auto",
+                  padding: 12,
+                  border: "1px solid #eee",
+                  borderRadius: 8,
+                  backgroundColor: "#fff",
+                  marginBottom: 12,
+                }}
+              >
+                {chatMessages.length === 0 ? (
+                  <p style={{ color: "#777", textAlign: "center" }}>No messages yet. Start the conversation!</p>
+                ) : (
+                  chatMessages.map((message) => {
+                    const isAdmin = message.senderRole === "admin";
+                    return (
+                      <div
+                        key={message.id}
+                        style={{
+                          textAlign: isAdmin ? "right" : "left",
+                          marginBottom: 12,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "inline-block",
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            backgroundColor: isAdmin ? "#e0d4ff" : "#f0f0f0",
+                            maxWidth: "80%",
+                          }}
+                        >
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, color: "#5b2bd1" }}>
+                            {message.sender || (isAdmin ? "Admin" : "Player")}
+                          </div>
+                          <div style={{ fontSize: 14, color: "#222" }}>{message.text}</div>
+                          <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>{getReadableChatTime(message.createdAt)}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <form onSubmit={sendChatMessage} style={{ display: "flex", gap: 12 }}>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type a message to the player..."
+                  style={{
+                    flex: 1,
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #ccc",
+                    fontSize: 14,
+                  }}
+                  disabled={chatSending}
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim() || chatSending}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    border: "none",
+                    backgroundColor: chatInput.trim() ? "#450693" : "#9c9c9c",
+                    color: "#fff",
+                    cursor: chatInput.trim() && !chatSending ? "pointer" : "not-allowed",
+                    minWidth: 90,
+                  }}
+                >
+                  {chatSending ? "Sending..." : "Send"}
+                </button>
+              </form>
+              {chatError ? <div style={{ color: "red", marginTop: 8 }}>{chatError}</div> : null}
             </div>
 
             <table className={styles.table}>
