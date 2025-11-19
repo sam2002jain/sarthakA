@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "../../firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import type { User as FirebaseUser } from "firebase/auth";
 
 type User = {
   id: string;
@@ -33,15 +34,19 @@ type User = {
   bhajanquiz?: boolean;
 };
 
+type TimestampValue = number | string | Timestamp | { seconds: number; nanoseconds?: number } | null | undefined;
 type ChatMessage = {
   id: string;
   text?: string;
   sender?: string;
   senderRole?: string;
-  createdAt?: any;
+  createdAt?: TimestampValue;
 };
 
 const SESSION_DOC_ID = "live_session_global";
+type LoginDoc = User & { rights?: Record<string, boolean> };
+type ConfigDoc = { timeleftforkbs?: Timestamp | string | null };
+type ToggleField = keyof Pick<User, "postapproval" | "postdelete" | "postedit" | "postvisible" | "kbsquiz" | "bhajanquiz">;
 
 // Data contract:
 // Each document in `login` collection is expected to have:
@@ -55,7 +60,7 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [currentUid, setCurrentUid] = useState<string | null>(null);
-  const [authUser, setAuthUser] = useState<any | null | undefined>(undefined);
+  const [authUser, setAuthUser] = useState<FirebaseUser | null | undefined>(undefined);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
@@ -76,15 +81,15 @@ export default function Home() {
         // Verify current user's admin status by reading their `login` doc (by uid)
         const myDocRef = doc(db, "login", uid);
         const myDoc = await getDoc(myDocRef);
-        const myData = myDoc.exists() ? (myDoc.data() as any) : null;
+        const myData = myDoc.exists() ? (myDoc.data() as LoginDoc) : null;
         // If doc exists and indicates admin, proceed. Otherwise try to find by email.
         if (!myData || !myData.isAdmin) {
           // try to find a login doc that matches the user's email
           const usersByEmailQ = query(collection(db, "login"), where("email", "==", auth.currentUser?.email || ""));
           const byEmailSnap = await getDocs(usersByEmailQ);
-          let byEmailDoc: any = null;
+          let byEmailDoc: (LoginDoc & { id: string }) | null = null;
           if (!byEmailSnap.empty) {
-            byEmailDoc = { id: byEmailSnap.docs[0].id, ...(byEmailSnap.docs[0].data() as any) };
+            byEmailDoc = { ...(byEmailSnap.docs[0].data() as LoginDoc), id: byEmailSnap.docs[0].id };
           }
 
           // If found by email and isAdmin true, continue
@@ -116,9 +121,9 @@ export default function Home() {
         setCurrentUid(uid);
 
         // current user is admin -> fetch all users
-  const colRef = collection(db, "login");
-  const snap = await getDocs(colRef);
-        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as User[];
+        const colRef = collection(db, "login");
+        const snap = await getDocs(colRef);
+        const list = snap.docs.map((d) => ({ ...(d.data() as LoginDoc), id: d.id })) as User[];
         // Normalize top-level flags
         const normalized = list.map((u) => ({
           ...u,
@@ -167,7 +172,7 @@ export default function Home() {
     };
   }, []);
 
-  const getTimestampValue = (value: any) => {
+  const getTimestampValue = (value: TimestampValue) => {
     if (!value) return Date.now();
     if (typeof value === "number") return value;
     if (typeof value === "string") {
@@ -181,7 +186,7 @@ export default function Home() {
     return Date.now();
   };
 
-  const getReadableChatTime = (value: any) => {
+  const getReadableChatTime = (value: TimestampValue) => {
     const date = new Date(getTimestampValue(value));
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
@@ -200,7 +205,7 @@ export default function Home() {
       (snapshot) => {
         const nextMessages = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...(doc.data() as any),
+          ...(doc.data() as Omit<ChatMessage, "id">),
         }));
         setChatMessages(nextMessages);
         setChatError(null);
@@ -220,7 +225,7 @@ export default function Home() {
 
     setChatSending(true);
     try {
-      const senderName = auth.currentUser?.displayName || auth.currentUser?.email || "Admin";
+      const senderName = auth.currentUser?.displayName ?? auth.currentUser?.email ?? "Admin";
       await addDoc(collection(db, "live_chats", SESSION_DOC_ID, "messages"), {
         text: chatInput.trim(),
         sender: senderName,
@@ -237,9 +242,9 @@ export default function Home() {
     }
   };
 
-  const handleCheckboxChange = (userId: string, field: keyof User) => {
+  const handleCheckboxChange = (userId: string, field: ToggleField) => {
     setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, [field]: !(u as any)[field] } : u))
+      prev.map((u) => (u.id === userId ? { ...u, [field]: !u[field] } : u))
     );
   };
   // Per-row save state maps
@@ -282,7 +287,7 @@ export default function Home() {
       const cfgDoc = doc(db, "config", "global");
       const snap = await getDoc(cfgDoc);
       if (snap.exists()) {
-        const data = snap.data() as any;
+        const data = snap.data() as ConfigDoc;
         const v = data.timeleftforkbs;
         if (v == null) {
           setTimeleftforkbs("");
@@ -352,7 +357,7 @@ export default function Home() {
     setAuthenticating(true);
     setError(null);
     try {
-      const cred = await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email, password);
       // onAuthStateChanged will trigger and call loadIfAdmin
       setEmail("");
       setPassword("");
@@ -546,10 +551,10 @@ export default function Home() {
                       <input type="checkbox" checked={!!user.postvisible} onChange={() => handleCheckboxChange(user.id, "postvisible")} />
                     </td>
                     <td>
-                      <input type="checkbox" checked={!!user.kbsquiz} onChange={() => handleCheckboxChange(user.id, "kbsquiz" as any)} />
+                      <input type="checkbox" checked={!!user.kbsquiz} onChange={() => handleCheckboxChange(user.id, "kbsquiz")} />
                     </td>
                     <td>
-                      <input type="checkbox" checked={!!user.bhajanquiz} onChange={() => handleCheckboxChange(user.id, "bhajanquiz" as any)} />
+                      <input type="checkbox" checked={!!user.bhajanquiz} onChange={() => handleCheckboxChange(user.id, "bhajanquiz")} />
                     </td>
                     <td>
                       <button
