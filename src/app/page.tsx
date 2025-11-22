@@ -65,6 +65,11 @@ export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  
+  // Live quiz session state
+  const [liveSession, setLiveSession] = useState<any>(null);
+  const [lockSaving, setLockSaving] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
 
   // Auth gating + Fetch users from `login` collection (top-level flags)
   useEffect(() => {
@@ -219,6 +224,31 @@ export default function Home() {
     return () => unsubscribe();
   }, [authUser]);
 
+  // Subscribe to live quiz session
+  useEffect(() => {
+    if (!authUser) {
+      setLiveSession(null);
+      return;
+    }
+
+    const sessionRef = doc(db, "live_sessions", SESSION_DOC_ID);
+    const unsubscribe = onSnapshot(
+      sessionRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setLiveSession(snapshot.data());
+        } else {
+          setLiveSession(null);
+        }
+      },
+      (error) => {
+        console.error("Failed to subscribe to live session:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [authUser]);
+
   const sendChatMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!chatInput.trim() || chatSending || !authUser) return;
@@ -239,6 +269,24 @@ export default function Home() {
       setChatError("Failed to send message. Please try again.");
     } finally {
       setChatSending(false);
+    }
+  };
+
+  const lockAnswer = async () => {
+    if (lockSaving || !liveSession) return;
+
+    setLockSaving(true);
+    setLockError(null);
+    try {
+      const sessionRef = doc(db, "live_sessions", SESSION_DOC_ID);
+      await updateDoc(sessionRef, {
+        adminLocked: true,
+      });
+    } catch (error) {
+      console.error("Failed to lock answer:", error);
+      setLockError("Failed to lock answer. Please try again.");
+    } finally {
+      setLockSaving(false);
     }
   };
 
@@ -428,6 +476,188 @@ export default function Home() {
                 {configSaving ? "Saving..." : "Save config"}
               </button>
               {configError ? <div style={{ color: "red" }}>{configError}</div> : null}
+            </div>
+
+            {/* Live Quiz Session Monitor */}
+            <div
+              style={{
+                marginBottom: 24,
+                border: "1px solid #d9d9d9",
+                borderRadius: 12,
+                padding: 16,
+                backgroundColor: "#fafafa",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h4 style={{ margin: 0 }}>Live Quiz Session</h4>
+                <span style={{ fontSize: 12, color: "#666" }}>Session: {SESSION_DOC_ID}</span>
+              </div>
+              
+              {!liveSession ? (
+                <p style={{ color: "#777", textAlign: "center", padding: 20 }}>
+                  No active quiz session. Waiting for player to start...
+                </p>
+              ) : (
+                <div>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ fontWeight: 600, color: "#222" }}>Phase: {liveSession.phase || "N/A"}</span>
+                      {liveSession.activePlayer && (
+                        <span style={{ color: "#450693", fontWeight: 600 }}>
+                          Player: {liveSession.activePlayer}
+                        </span>
+                      )}
+                    </div>
+                    {liveSession.group && (
+                      <div style={{ marginBottom: 8 }}>
+                        <span style={{ fontWeight: 600, color: "#222" }}>Group: {liveSession.group}</span>
+                      </div>
+                    )}
+                    {liveSession.timer !== undefined && (
+                      <div style={{ marginBottom: 8 }}>
+                        <span style={{ fontWeight: 600, color: "#222" }}>
+                          Timer: {typeof liveSession.timer === "number" ? `${liveSession.timer}s` : liveSession.timer}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {liveSession.question && (
+                    <div style={{ marginBottom: 16 }}>
+                      <h5 style={{ margin: "0 0 12px 0", color: "#222", fontSize: 16 }}>Question:</h5>
+                      <p style={{ 
+                        padding: 12, 
+                        backgroundColor: "#fff", 
+                        borderRadius: 8, 
+                        border: "1px solid #eee",
+                        color: "#222",
+                        fontSize: 15,
+                        lineHeight: 1.5
+                      }}>
+                        {liveSession.question.text || liveSession.question}
+                      </p>
+                    </div>
+                  )}
+
+                  {liveSession.options && liveSession.options.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <h5 style={{ margin: "0 0 12px 0", color: "#222", fontSize: 16 }}>Options:</h5>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {liveSession.options.map((opt: string, idx: number) => {
+                          const isSelected = liveSession.selected === idx;
+                          const isCorrect = liveSession.question?.answerIndex === idx;
+                          const isHidden = opt === "";
+                          
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                padding: 12,
+                                backgroundColor: isSelected 
+                                  ? (liveSession.adminLocked 
+                                      ? (isCorrect ? "#4CAF50" : "#F44336")
+                                      : "#FFC400")
+                                  : "#fff",
+                                borderRadius: 8,
+                                border: `2px solid ${
+                                  isSelected
+                                    ? (liveSession.adminLocked
+                                        ? (isCorrect ? "#4CAF50" : "#F44336")
+                                        : "#FFC400")
+                                    : "#ddd"
+                                }`,
+                                color: isSelected ? "#fff" : "#222",
+                                fontWeight: isSelected ? 600 : 400,
+                                opacity: isHidden ? 0.3 : 1,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <span style={{ 
+                                fontWeight: 700, 
+                                minWidth: 24,
+                                color: isSelected ? "#fff" : "#450693"
+                              }}>
+                                {String.fromCharCode(65 + idx)}.
+                              </span>
+                              <span style={{ flex: 1 }}>
+                                {isHidden ? "(Hidden by 50:50)" : opt}
+                              </span>
+                              {isSelected && (
+                                <span style={{ fontSize: 18 }}>
+                                  {liveSession.adminLocked 
+                                    ? (isCorrect ? "✓" : "✗")
+                                    : "🔒"}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {liveSession.userLocked && !liveSession.adminLocked && (
+                    <div style={{ 
+                      marginBottom: 16, 
+                      padding: 12, 
+                      backgroundColor: "#FFF3CD", 
+                      borderRadius: 8,
+                      border: "1px solid #FFC107"
+                    }}>
+                      <p style={{ margin: 0, color: "#856404", fontWeight: 600 }}>
+                        Player has selected an answer. Click "Lock Answer" to proceed with checking.
+                      </p>
+                    </div>
+                  )}
+
+                  {liveSession.adminLocked && (
+                    <div style={{ 
+                      marginBottom: 16, 
+                      padding: 12, 
+                      backgroundColor: "#D4EDDA", 
+                      borderRadius: 8,
+                      border: "1px solid #28A745"
+                    }}>
+                      <p style={{ margin: 0, color: "#155724", fontWeight: 600 }}>
+                        Answer locked! The app will now check if the answer is correct.
+                      </p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={lockAnswer}
+                    disabled={lockSaving || !liveSession.userLocked || liveSession.adminLocked}
+                    style={{
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: 8,
+                      border: "none",
+                      backgroundColor: 
+                        (!liveSession.userLocked || liveSession.adminLocked)
+                          ? "#9c9c9c"
+                          : "#450693",
+                      color: "#fff",
+                      fontWeight: 600,
+                      fontSize: 16,
+                      cursor: 
+                        (!liveSession.userLocked || liveSession.adminLocked)
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                  >
+                    {lockSaving 
+                      ? "Locking..." 
+                      : liveSession.adminLocked 
+                        ? "Answer Locked" 
+                        : "Lock Answer"}
+                  </button>
+                  {lockError && (
+                    <div style={{ color: "red", marginTop: 8, fontSize: 14 }}>{lockError}</div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div
