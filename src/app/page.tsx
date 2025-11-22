@@ -607,7 +607,7 @@ export default function Home() {
                       border: "1px solid #FFC107"
                     }}>
                       <p style={{ margin: 0, color: "#856404", fontWeight: 600 }}>
-                        Player has selected an answer. Click "Lock Answer" to proceed with checking.
+                        Player has selected an answer. Click Lock Answer to proceed with checking.
                       </p>
                     </div>
                   )}
