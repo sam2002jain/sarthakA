@@ -66,12 +66,10 @@ export default function Home() {
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   
-  // Live quiz session state
-  const [liveSession, setLiveSession] = useState<any>(null);
+  const [liveSession, setLiveSession] = useState(null);
   const [lockSaving, setLockSaving] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
-  // Auth gating + Fetch users from `login` collection (top-level flags)
   useEffect(() => {
     let mounted = true;
 
