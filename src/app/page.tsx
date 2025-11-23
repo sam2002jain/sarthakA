@@ -483,11 +483,11 @@ export default function Home() {
                 border: "1px solid #d9d9d9",
                 borderRadius: 12,
                 padding: 16,
-                backgroundColor: "#fafafa",
+                backgroundColor: "#bbbb",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <h4 style={{ margin: 0 }}>Live Quiz Session</h4>
+                <h4 style={{ margin: 0, color:'#202124' }}>Live Quiz Session</h4>
                 <span style={{ fontSize: 12, color: "#666" }}>Session: {SESSION_DOC_ID}</span>
               </div>
               
@@ -668,7 +668,7 @@ export default function Home() {
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <h4 style={{ margin: 0 }}>Live Session Chat</h4>
+                <h4 style={{ margin: 0, color:'#202124'}}>Live Session Chat</h4>
                 <span style={{ fontSize: 12, color: "#666" }}>Session: {SESSION_DOC_ID}</span>
               </div>
               <div
