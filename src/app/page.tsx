@@ -66,7 +66,7 @@ export default function Home() {
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   
-  const [liveSession, setLiveSession] = useState(null);
+  const [liveSession, setLiveSession] = useState<any>(null);
   const [lockSaving, setLockSaving] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
