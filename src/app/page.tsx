@@ -271,7 +271,7 @@ export default function Home() {
   };
 
   const lockAnswer = async () => {
-    if (lockSaving || !liveSession) return;
+    if (lockSaving || !liveSession || liveSession.adminLocked) return;
 
     setLockSaving(true);
     setLockError(null);
@@ -626,21 +626,21 @@ export default function Home() {
 
                   <button
                     onClick={lockAnswer}
-                    disabled={lockSaving || !liveSession.userLocked || liveSession.adminLocked}
+                    disabled={lockSaving || liveSession.adminLocked}
                     style={{
                       width: "100%",
                       padding: "12px 16px",
                       borderRadius: 8,
                       border: "none",
                       backgroundColor: 
-                        (!liveSession.userLocked || liveSession.adminLocked)
+                        (lockSaving || liveSession.adminLocked)
                           ? "#9c9c9c"
                           : "#450693",
                       color: "#fff",
                       fontWeight: 600,
                       fontSize: 16,
                       cursor: 
-                        (!liveSession.userLocked || liveSession.adminLocked)
+                        (lockSaving || liveSession.adminLocked)
                           ? "not-allowed"
                           : "pointer",
                     }}
