@@ -32,6 +32,7 @@ type User = {
   isAdmin?: boolean;
   kbsquiz?: boolean;
   bhajanquiz?: boolean;
+  access_ojm?: boolean;
 };
 
 type TimestampValue = number | string | Timestamp | { seconds: number; nanoseconds?: number } | null | undefined;
@@ -46,7 +47,7 @@ type ChatMessage = {
 const SESSION_DOC_ID = "live_session_global";
 type LoginDoc = User & { rights?: Record<string, boolean> };
 type ConfigDoc = { timeleftforkbs?: Timestamp | string | null };
-type ToggleField = keyof Pick<User, "postapproval" | "postdelete" | "postedit" | "postvisible" | "kbsquiz" | "bhajanquiz">;
+type ToggleField = keyof Pick<User, "postapproval" | "postdelete" | "postedit" | "postvisible" | "kbsquiz" | "bhajanquiz" | "access_ojm">;
 
 // Data contract:
 // Each document in `login` collection is expected to have:
@@ -136,6 +137,7 @@ export default function Home() {
           postvisible: !!u.postvisible,
           kbsquiz: !!u.kbsquiz,
           bhajanquiz: !!u.bhajanquiz,
+          access_ojm: !!u.access_ojm,
         }));
         if (mounted) setUsers(normalized);
       } catch (err) {
@@ -317,6 +319,7 @@ export default function Home() {
         postvisible: !!u.postvisible,
         kbsquiz: !!u.kbsquiz,
         bhajanquiz: !!u.bhajanquiz,
+        access_ojm: !!u.access_ojm,
       });
       setRowErrorState(u.id, null);
     } catch (err) {
@@ -759,6 +762,7 @@ export default function Home() {
                   <th>Post Visible</th>
                   <th>kbsquiz</th>
                   <th>bhajanquiz</th>
+                  <th>Access OJM</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -783,6 +787,9 @@ export default function Home() {
                     </td>
                     <td>
                       <input type="checkbox" checked={!!user.bhajanquiz} onChange={() => handleCheckboxChange(user.id, "bhajanquiz")} />
+                    </td>
+                    <td>
+                      <input type="checkbox" checked={!!user.access_ojm} onChange={() => handleCheckboxChange(user.id, "access_ojm")} />
                     </td>
                     <td>
                       <button
