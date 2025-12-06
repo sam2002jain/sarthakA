@@ -19,6 +19,7 @@ import {
 import { db, auth } from "../../firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import type { User as FirebaseUser } from "firebase/auth";
+import * as XLSX from "xlsx";
 
 type User = {
   id: string;
@@ -70,6 +71,14 @@ export default function Home() {
   const [liveSession, setLiveSession] = useState<any>(null);
   const [lockSaving, setLockSaving] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+
+  // Excel upload states
+  const [wofUploading, setWofUploading] = useState(false);
+  const [wofError, setWofError] = useState<string | null>(null);
+  const [wofSuccess, setWofSuccess] = useState<string | null>(null);
+  const [wopUploading, setWopUploading] = useState(false);
+  const [wopError, setWopError] = useState<string | null>(null);
+  const [wopSuccess, setWopSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -424,6 +433,95 @@ export default function Home() {
     setUsers([]);
   };
 
+  // Excel upload handlers
+  const parseExcelFile = (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: "binary" });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          resolve(jsonData);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsBinaryString(file);
+    });
+  };
+
+  const handleWofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset states
+    setWofError(null);
+    setWofSuccess(null);
+    setWofUploading(true);
+
+    try {
+      // Parse Excel file
+      const jsonData = await parseExcelFile(file);
+      
+      if (!jsonData || jsonData.length === 0) {
+        throw new Error("Excel file is empty or invalid");
+      }
+
+      // Upload to Firestore collection "WOF"
+      const wofCollection = collection(db, "WOF");
+      const batchPromises = jsonData.map((row) => addDoc(wofCollection, row));
+      await Promise.all(batchPromises);
+
+      setWofSuccess(`Successfully uploaded ${jsonData.length} records to WOF collection`);
+      
+      // Reset file input
+      e.target.value = "";
+    } catch (error) {
+      console.error("Failed to upload WOF Excel:", error);
+      setWofError((error as Error).message || "Failed to upload WOF Excel file");
+    } finally {
+      setWofUploading(false);
+    }
+  };
+
+  const handleWopUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset states
+    setWopError(null);
+    setWopSuccess(null);
+    setWopUploading(true);
+
+    try {
+      // Parse Excel file
+      const jsonData = await parseExcelFile(file);
+      
+      if (!jsonData || jsonData.length === 0) {
+        throw new Error("Excel file is empty or invalid");
+      }
+
+      // Upload to Firestore collection "WOP"
+      const wopCollection = collection(db, "WOP");
+      const batchPromises = jsonData.map((row) => addDoc(wopCollection, row));
+      await Promise.all(batchPromises);
+
+      setWopSuccess(`Successfully uploaded ${jsonData.length} records to WOP collection`);
+      
+      // Reset file input
+      e.target.value = "";
+    } catch (error) {
+      console.error("Failed to upload WOP Excel:", error);
+      setWopError((error as Error).message || "Failed to upload WOP Excel file");
+    } finally {
+      setWopUploading(false);
+    }
+  };
+
   return (
     <div className={styles.page}>
       {/* HEADER */}
@@ -750,6 +848,108 @@ export default function Home() {
                 </button>
               </form>
               {chatError ? <div style={{ color: "red", marginTop: 8 }}>{chatError}</div> : null}
+            </div>
+
+            {/* WOF Excel Upload Section */}
+            <div
+              style={{
+                marginBottom: 24,
+                border: "1px solid #d9d9d9",
+                borderRadius: 12,
+                padding: 16,
+                backgroundColor: "#fafafa",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h4 style={{ margin: 0, color: "#202124" }}>WOF Excel Upload</h4>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ margin: "0 0 8px 0", color: "#666", fontSize: 14 }}>
+                  Upload an Excel file to add records to the WOF collection in Firestore.
+                </p>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleWofUpload}
+                  disabled={wofUploading}
+                  style={{
+                    padding: "8px 12px",
+                    border: "1px solid #ccc",
+                    borderRadius: 8,
+                    fontSize: 14,
+                    width: "100%",
+                    color:'#202124',
+                    backgroundColor:'#bbb',
+                    cursor: wofUploading ? "not-allowed" : "pointer",
+                  }}
+                />
+              </div>
+              {wofUploading && (
+                <div style={{ color: "#202124", marginTop: 8, fontSize: 14 }}>
+                  Uploading and processing Excel file...
+                </div>
+              )}
+              {wofSuccess && (
+                <div style={{ color: "#28A745", marginTop: 8, fontSize: 14, fontWeight: 600 }}>
+                  {wofSuccess}
+                </div>
+              )}
+              {wofError && (
+                <div style={{ color: "red", marginTop: 8, fontSize: 14 }}>
+                  Error: {wofError}
+                </div>
+              )}
+            </div>
+
+            {/* WOP Excel Upload Section */}
+            <div
+              style={{
+                marginBottom: 24,
+                border: "1px solid #d9d9d9",
+                borderRadius: 12,
+                padding: 16,
+                backgroundColor: "#fafafa",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h4 style={{ margin: 0, color: "#202124" }}>WOP Excel Upload</h4>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ margin: "0 0 8px 0", color: "#666", fontSize: 14 }}>
+                  Upload an Excel file to add records to the WOP collection in Firestore.
+                </p>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleWopUpload}
+                  disabled={wopUploading}
+                  style={{
+                    padding: "8px 12px",
+                    border: "1px solid #ccc",
+                    borderRadius: 8,
+                    fontSize: 14,
+                    width: "100%",
+                    color:'#202124',
+                    backgroundColor:'#bbb',
+                    cursor: wopUploading ? "not-allowed" : "pointer",
+                  }}
+                />
+              </div>
+              {wopUploading && (
+                <div style={{ color: "#450693", marginTop: 8, fontSize: 14 }}>
+                  Uploading and processing Excel file...
+                </div>
+              )}
+              {wopSuccess && (
+                <div style={{ color: "#28A745", marginTop: 8, fontSize: 14, fontWeight: 600 }}>
+                  {wopSuccess}
+                </div>
+              )}
+              {wopError && (
+                <div style={{ color: "red", marginTop: 8, fontSize: 14 }}>
+                  Error: {wopError}
+                </div>
+              )}
             </div>
 
             <table className={styles.table}>
