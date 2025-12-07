@@ -15,6 +15,8 @@ import {
   Timestamp,
   updateDoc,
   where,
+  deleteDoc,
+  writeBatch
 } from "firebase/firestore";
 import { db, auth } from "../../firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
@@ -522,6 +524,28 @@ export default function Home() {
     }
   };
 
+  const deleteDocumentsInCollection = async (collectionPath:string) => {
+    try {
+      const collectionRef = collection(db, collectionPath);
+  
+      const querySnapshot = await getDocs(collectionRef);
+  
+      const batch = writeBatch(db);
+  
+      querySnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+  
+      await batch.commit();
+  
+      console.log(`Successfully deleted ${querySnapshot.size} documents from ${collectionPath}`);
+      alert(`Collection "${collectionPath}" has been cleared.`);
+    } catch (error) {
+      console.error('Error deleting collection documents: ', error);
+      alert('Failed to clear collection. Check the console for details.');
+    }
+  };
+
   return (
     <div className={styles.page}>
       {/* HEADER */}
@@ -860,8 +884,11 @@ export default function Home() {
                 backgroundColor: "#fafafa",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexDirection:'row' }}>
                 <h4 style={{ margin: 0, color: "#202124" }}>WOF Excel Upload</h4>
+                <button onClick={() => deleteDocumentsInCollection("WOF")} style={{ marginLeft: 8, color: "white", backgroundColor: "#0070f3", border: "none", padding: "6px 12px", cursor: "pointer" }}>
+                  Delete WOF Collection
+                </button>
               </div>
               <div style={{ marginBottom: 12 }}>
                 <p style={{ margin: "0 0 8px 0", color: "#666", fontSize: 14 }}>
@@ -911,8 +938,11 @@ export default function Home() {
                 backgroundColor: "#fafafa",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexDirection:'row' }}>
                 <h4 style={{ margin: 0, color: "#202124" }}>WOP Excel Upload</h4>
+                <button onClick={() => deleteDocumentsInCollection("WOP")} style={{ marginLeft: 8, color: "white", backgroundColor: "#0070f3", border: "none", padding: "6px 12px", cursor: "pointer" }}>
+                  Delete WOP Collection
+                </button>
               </div>
               <div style={{ marginBottom: 12 }}>
                 <p style={{ margin: "0 0 8px 0", color: "#666", fontSize: 14 }}>
